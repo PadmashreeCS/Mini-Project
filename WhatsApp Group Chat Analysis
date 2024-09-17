@@ -1,0 +1,166 @@
+import pandas as pd
+import numpy as np
+import re
+
+import matplotlib.pyplot as plt
+from PIL import Image
+
+from collections import Counter
+from wordcloud import WordCloud, STOPWORDS, ImageColorGenerator
+
+# importing the dataset
+conversation ='D:/kaggle.txt'
+
+def date_time(s):
+    # Define a regular expression pattern to match date and time strings
+    # in the format 'MM/DD/YYYY,HH:MMam/pm-'
+    pattern = r'^([0-9]+)(\/)+([0-9]+)(\/)+([0-9]+),([0-9]+)[[]?(AM|PM|am|pm)?-'
+
+    # Use the re.match function to check if the input string s matches the pattern
+    result = re.match(pattern, s)
+
+    # If a match is found (result is not None)
+    if result:
+        # Return True to indicate a valid date and time format
+        return True
+
+    # If no match is found
+    return False
+
+def find_author(s):
+    # Split the input string s using the colon ':' as the separator
+    s = s.split(":")
+
+    # Check if the length of the resulting list is 2
+    if len(s) == 2:
+        # If the length is 2, it means the string is in the format "author:message"
+        # So, we return True to indicate that an author is present
+        return True
+
+    else:
+        # If the length is not 2, it means the string is not in the expected format
+        # So, we return False to indicate that an author is not present
+        return False
+
+def message(line):
+    # Split the input line by the hyphen '-'
+    splitline = line.split('-')
+
+    # The first part of the split line is expected to be the date and time
+    dateTime = splitline[0]
+
+    # Split the dateTime string by the comma ',' to separate the date and time
+    date, time = dateTime.split(',')
+
+    # Join the remaining parts of splitline (from index 1 to the end) to form the message
+    message = ''.join(splitline[1:])
+
+    # Check if the message contains an author identifier using the find_author function
+    if find_author(message):
+        # If an author is found, split the message by the colon ':'
+        splitmessage = message.split(':')
+
+        # The first part of the split message is expected to be the author
+        author = splitmessage[0]
+
+        # Join the remaining parts of splitmessage (from index 1 to the end) to form the message text
+        message = ''.join(splitmessage[1:])
+
+    else:
+        # If no author is found, set the author to None
+        author = None
+
+    # Return the extracted date, time, author, and message as a tuple
+    return date, time, author, message
+
+data = []  # Initialize an empty list to store the parsed data
+
+# Path to the conversation file
+conversation = 'D:/kaggle.txt'
+
+# Open the conversation file with UTF-8 encoding
+with open(conversation, encoding='utf-8') as fp:
+    fp.readline()  # Skip the first line (usually contains metadata)
+
+    messageBuffer = []  # Initialize an empty list to store message lines
+    date, time, author = None, None, None  # Initialize date, time, and author to None
+
+    while True:
+        line = fp.readline()  # Read a line from the file
+        if not line:  # If the line is empty (end of file reached)
+            break  # Exit the loop
+
+        line = line.strip()  # Remove leading/trailing whitespace from the line
+
+        if date_time(line):  # Check if the line matches the date and time format
+            if len(messageBuffer) > 0:  # If there are lines in the message buffer
+                # Append the parsed data (date, time, author, message) to the data list
+                data.append([date, time, author, ''.join(messageBuffer)])
+                messageBuffer.clear()  # Clear the message buffer
+
+            # Call the message function to parse the current line
+            date, time, author, message = message(line)
+            messageBuffer.append(message)  # Add the parsed message to the message buffer
+        else:
+            messageBuffer.append(line)  # Add the line to the message buffer
+
+pattern = r'^(\d+)/(\d+)/(\d+), (\d+):(\d+) (AM|PM)'
+
+
+import pandas as pd
+import re
+from dateutil import parser
+from nltk.sentiment.vader import SentimentIntensityAnalyzer
+
+data = []
+conversation = 'D:/kaggle.txt'
+
+with open(conversation, encoding='utf-8') as fp:
+    for line in fp:
+        line = line.strip()
+        parts = line.split(' - ', maxsplit=1)
+        if len(parts) == 2:
+            timestamp, message = parts
+            timestamp_parts = timestamp.split('] ', maxsplit=1)
+            if len(timestamp_parts) == 2:
+                date_time, author = timestamp_parts
+                try:
+                    date_time = parser.parse(date_time, fuzzy=True)
+                    date = date_time.date()
+                    time = date_time.time()
+                except ValueError:
+                    date = None
+                    time = None
+                if author == '~':
+                    author = None
+                elif ':' in author:
+                    author = author.split(': ')[0]
+                else:
+                    author = None
+            else:
+                date_time = timestamp_parts[0]
+                try:
+                    date_time = parser.parse(date_time, fuzzy=True)
+                    date = date_time.date()
+                    time = date_time.time()
+                except ValueError:
+                    date = None
+                    time = None
+                author = None
+            data.append([date, time, author, message])
+
+df = pd.DataFrame(data, columns=["Date", 'Time', 'Author', 'Message'])
+data = df.dropna(subset=['Date'])
+
+# Sentiment analysis
+sentiments = SentimentIntensityAnalyzer()
+data["Positive"] = [sentiments.polarity_scores(i)["pos"] for i in data["Message"]]
+data["Negative"] = [sentiments.polarity_scores(i)["neg"] for i in data["Message"]]
+data["Neutral"] = [sentiments.polarity_scores(i)["neu"] for i in data["Message"]]
+
+print(data.head(10))
+
+print(data['Positive'].sum())
+print(data['Negative'].sum())
+
+print(data['Message'].head(10))
